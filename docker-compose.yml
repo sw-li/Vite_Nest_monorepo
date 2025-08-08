@@ -1,0 +1,53 @@
+#version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: cvcd_db
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: cvcd
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d cvcd"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: cvcd_backend
+    environment:
+      DATABASE_URL: "postgresql://app:app@db:5432/cvcd?schema=public"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+    command: npm run start:dev
+
+  frontend:
+    build: ./frontend
+    container_name: cvcd_frontend
+    environment:
+      NODE_ENV: development          # ensure dev deps (vite) are installed/kept
+      VITE_API_URL: "http://localhost:3000"
+      CHOKIDAR_USEPOLLING: "true"    # reliable file watching in Docker
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  db_data:
